@@ -11,6 +11,9 @@
 //   builder  — may submit work for review (host policy: a role, never a hardcoded user)
 //   reviewer — the original author or an assigned reviewer; may approve or request changes
 // One decision resolves the round for every reviewer. Completed is terminal.
+//
+// With requireReview=false (approvals.feedback off) a builder may also close
+// Open/In Progress work directly, with an optional note. The review path still works.
 
 export const COMMENT_STATUSES = Object.freeze(['Open', 'In Progress', 'Needs Review', 'Completed']);
 export const MAX_FEEDBACK_LENGTH = 4000;
@@ -40,23 +43,25 @@ const deny = (code, error) => ({ ok: false, code, error });
  * @param {string[]} [p.reviewerIds]          additional assigned reviewers
  * @param {boolean} [p.hasTasks]              originals with subtasks are reviewed per task
  * @param {(actor:Actor) => boolean} p.isBuilder  host policy for submitting work
+ * @param {boolean} [p.requireReview]         default true; false lets a builder close work directly
  */
 export function planStatusChange(p) {
-  const { actor, current, next, authorId, reviewerIds = [], hasTasks = false, isBuilder } = p;
-  const rule = TRANSITIONS[next];
+  const { actor, current, next, authorId, reviewerIds = [], hasTasks = false, isBuilder, requireReview = true } = p;
+  const direct = requireReview === false && next === 'Completed' && ['Open', 'In Progress'].includes(current);
+  const rule = direct ? { from: ['Open', 'In Progress'], role: 'builder' } : TRANSITIONS[next];
   if (!rule) return deny(400, 'Unknown status.');
   const feedback = typeof p.feedback === 'string' ? p.feedback.trim() : undefined;
   if (feedback !== undefined && (feedback.length < 1 || feedback.length > MAX_FEEDBACK_LENGTH))
     return deny(400, `Feedback must be 1–${MAX_FEEDBACK_LENGTH} characters.`);
   if (next === 'In Progress' && !feedback) return deny(400, 'Requests for changes require written feedback.');
-  if (next === 'Completed' && feedback !== undefined) return deny(400, 'Approval does not take feedback.');
+  if (next === 'Completed' && feedback !== undefined && !direct) return deny(400, 'Approval does not take feedback.');
   if (hasTasks) return deny(409, 'Review the individual tasks for this comment.');
   if (rule.role === 'builder' && !(typeof isBuilder === 'function' && isBuilder(actor)))
     return deny(403, 'Only a builder can submit work for review.');
   if (rule.role === 'reviewer' && !isReviewer(actor, authorId, reviewerIds))
     return deny(403, 'Only the original author or an assigned reviewer can approve or request changes.');
   if (!rule.from.includes(current)) return deny(409, 'This status change is not available.');
-  return { ok: true, event: { status: next, feedback: feedback ?? null, actorId: actor.oid, actorName: actor.name, viaAgent: !!actor.viaAgent } };
+  return { ok: true, event: { status: next, feedback: feedback ?? null, actorId: actor.oid, actorName: actor.name, viaAgent: !!actor.viaAgent, reviewed: !direct } };
 }
 
 /** The original author is always a reviewer, independently of the assigned list. */

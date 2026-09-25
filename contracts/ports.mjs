@@ -11,6 +11,7 @@
 //   - Approval requires verifiable evidence (see isVerifiableEvidence).
 
 import { createTargetRegistry } from './targets.mjs';
+import { resolveApprovals, definitionApprovalRequired } from './approvals.mjs';
 
 /**
  * @typedef {{tenant:string, oid:string, name:string, email?:string, viaAgent?:boolean}} Actor
@@ -22,7 +23,8 @@ import { createTargetRegistry } from './targets.mjs';
  * @typedef {object} ScopePolicy
  * @property {(actor:Actor, scope:Scope) => boolean|Promise<boolean>} canView
  * @property {(actor:Actor, scope:Scope) => boolean|Promise<boolean>} canApprove
- *           definition approval; decide deliberately (owners/stewards vs any viewer)
+ *           definition approval; decide deliberately (owners/stewards vs any viewer).
+ *           Must return false when definition approval is off for that metric.
  * @property {(actor:Actor) => boolean} isBuilder   may submit feedback work for review
  *
  * @typedef {object} GovernanceStore
@@ -83,6 +85,7 @@ const ID = /^[a-z0-9][a-z0-9._-]{0,99}$/;
  * @param {Record<string, string>} [d.aliases]    oldId → newId, keeps old links working
  * @param {import('./targets.mjs').DynamicTargetResolver} [d.resolveTarget]
  * @param {Record<string, readonly string[]>} [d.viewChoices]  allowed values per share-link control
+ * @param {import('./approvals.mjs').ApprovalConfig} [d.approvals]  optional; both kinds default on
  * @param {ReturnType<typeof createTargetRegistry>} [registry]  shared host registry
  */
 export function defineDashboard(d, registry = createTargetRegistry()) {
@@ -96,13 +99,22 @@ export function defineDashboard(d, registry = createTargetRegistry()) {
     registry.add(d.id, id, target);
   }
   for (const [oldId, newId] of Object.entries(d.aliases ?? {})) registry.alias(d.id, oldId, newId);
+  const approvals = resolveApprovals(d.approvals);
+  for (const metricId of Object.keys(approvals.metrics)) {
+    if (!metrics.includes(metricId)) throw new TypeError(`approvals.metrics refers to unregistered metric "${metricId}".`);
+  }
   if (d.resolveTarget) registry.addResolver(d.id, d.resolveTarget);
   return Object.freeze({
     id: d.id,
     title: d.title,
     metrics: Object.freeze(metrics),
     viewChoices: Object.freeze({ ...(d.viewChoices ?? {}) }),
+    approvals,
     registry,
+    /** Pass as governedEvidence(e, state, {approvals: dashboard.definitionApprovals(id)}). */
+    definitionApprovals(metricId) { return definitionApprovalRequired(approvals, metricId); },
+    /** Pass as planStatusChange({... requireReview: dashboard.feedbackReview}). */
+    get feedbackReview() { return approvals.feedback; },
     /** Is this a registered scope? Unknown dashboard/metric scopes must be rejected. */
     hasScope(scope) {
       return scope?.dashboardId === d.id && (scope.metricId === undefined || scope.metricId === '' || metrics.includes(scope.metricId));

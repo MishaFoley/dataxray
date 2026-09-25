@@ -44,6 +44,17 @@ inherit them instead of re-implementing them.
     `NotificationSink`, `EvidenceResolver`; `assertPort` checks implementations.
   - `defineDashboard` — one declaration per dashboard; validates IDs, metrics,
     targets and aliases at startup and exposes `hasScope` / `resolveTarget`.
+  - **Optional approvals** (`contracts/approvals.mjs`): `approvals` config on
+    `defineDashboard` turns definition approval and/or feedback review off per
+    dashboard, with per-metric overrides and a `source` (`nest` | `host`). Both
+    default **on**. Unknown keys and non-boolean flags throw, so a typo can't
+    silently disable approvals.
+- **`VERDICT.UNGOVERNED` / `'ungoverned'`**: current, healthy data where the host
+  turned definition approval off. Rendered neutral ("Current · approval not
+  required"), never green. Only `governedEvidence(e, s, {approvals: false})` emits
+  it; `computeVerdict` is unchanged.
+- `planStatusChange({requireReview: false})`: a builder may close Open/In Progress
+  work directly with an optional note; `event.reviewed` records which path was used.
 - **TypeScript declarations** for `dataxray/core` and `dataxray/contracts`
   (`types` export condition). A test keeps runtime exports and declarations in sync.
 - `CHANGELOG.md`, `UPGRADING.md`.

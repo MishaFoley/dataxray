@@ -64,7 +64,7 @@ export type Actor = { tenant: string; oid: string; name: string; email?: string;
 export type Scope = { dashboardId: string; metricId?: string };
 export const COMMENT_STATUSES: readonly CommentStatus[];
 export type StatusChangeDecision =
-  | { ok: true; event: { status: Exclude<CommentStatus, "Open">; feedback: string | null; actorId: string; actorName: string; viaAgent: boolean } }
+  | { ok: true; event: { status: Exclude<CommentStatus, "Open">; feedback: string | null; actorId: string; actorName: string; viaAgent: boolean; reviewed: boolean } }
   | { ok: false; code: 400 | 403 | 409; error: string };
 export function planStatusChange(p: {
   actor: Actor;
@@ -75,6 +75,7 @@ export function planStatusChange(p: {
   reviewerIds?: string[];
   hasTasks?: boolean;
   isBuilder: (actor: Actor) => boolean;
+  requireReview?: boolean;
 }): StatusChangeDecision;
 export function isReviewer(actor: Actor, authorId: string, reviewerIds?: string[]): boolean;
 export function validateReviewerIds(ids: unknown): { ok: true; value: string[] } | { ok: false; code: 400; error: string };
@@ -118,14 +119,26 @@ export type DashboardDefinition = {
   aliases?: Record<string, string>;
   resolveTarget?: DynamicTargetResolver;
   viewChoices?: Record<string, readonly string[]>;
+  approvals?: ApprovalConfig;
 };
 export type Dashboard = Readonly<{
   id: string;
   title: string;
   metrics: readonly string[];
   viewChoices: Readonly<Record<string, readonly string[]>>;
+  approvals: ResolvedApprovals;
   registry: TargetRegistry;
+  definitionApprovals(metricId?: string): boolean;
+  readonly feedbackReview: boolean;
   hasScope(scope: Scope | null | undefined): boolean;
   resolveTarget(id: string, input?: unknown): TargetDefinition | null;
 }>;
 export function defineDashboard(d: DashboardDefinition, registry?: TargetRegistry): Dashboard;
+
+// ---- Approvals (optional) ----
+export type ApprovalSource = "nest" | "host";
+export type ApprovalConfig = boolean | { definitions?: boolean; feedback?: boolean; metrics?: Record<string, boolean>; source?: ApprovalSource };
+export type ResolvedApprovals = Readonly<{ definitions: boolean; feedback: boolean; metrics: Readonly<Record<string, boolean>>; source: ApprovalSource }>;
+export const APPROVAL_SOURCES: readonly ApprovalSource[];
+export function resolveApprovals(config?: ApprovalConfig): ResolvedApprovals;
+export function definitionApprovalRequired(approvals: ApprovalConfig | ResolvedApprovals, metricId?: string): boolean;

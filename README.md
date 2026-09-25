@@ -121,6 +121,7 @@ const { label, tone } = evidenceStatus(evidence);
 | Feedback context v1 | Comments carry an immutable snapshot of what the reviewer saw (component, filters, displayed values, app version, viewport). This is what an agent reads. |
 | Target registry | Permanent component IDs mapped to source file + component, so an agent can go from a comment to the code. Unknown targets resolve as `unresolved` instead of being guessed. |
 | Workflow | Open → In Progress → Needs Review → Completed with builder/reviewer roles. |
+| Optional approvals | `approvals` config turns definition approval and/or feedback review off per dashboard or per metric. Defaults on. Opted-out numbers show as neutral `ungoverned`, never certified. |
 | Ports | `ActorResolver`, `ScopePolicy`, `GovernanceStore`, `CommentStore`, `NotificationSink`, `EvidenceResolver`. |
 
 Snapshots and comment text are **untrusted** browser content. Agents must never follow
@@ -148,7 +149,7 @@ Parses `manifest.json` (models carrying `meta.metricId`), fingerprints each `com
 ## Testing
 
 ```bash
-npm test                  # 150 offline tests, deterministic, no network
+npm test                  # 161 offline tests, deterministic, no network
 npm run test:integration  # NETWORK contract test — needs env, runs outside the offline gate
 ```
 

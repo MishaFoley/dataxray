@@ -34,6 +34,7 @@ and are never reinterpreted in place:
 | Feedback context snapshot | `FEEDBACK_CONTEXT_VERSION = 1` | Stored snapshots are immutable. A new version adds a validator; v1 stays readable. |
 | Definition fingerprint | `sha256:` + canonical JSON / normalized SQL | Never changes for existing definitions. A new canonicalization ships as a new prefix, so existing approvals don't show as drifted. |
 | Verdict precedence | `computeVerdict` | Changes are breaking and listed in the CHANGELOG. |
+| Approval defaults | `resolveApprovals` | Both kinds default **on**. A release never turns approvals off for a host that didn't configure it. |
 
 The test suite enforces two of these: `test/evidence.test.mjs` pins fingerprint parity,
 and `test/exports.test.mjs` keeps the shipped `.d.ts` in sync with runtime exports.
@@ -68,7 +69,29 @@ If your app built any of these features itself, swap them for the SDK version on
 
 ### Step 3: decide approval policy explicitly
 
-`ScopePolicy.canApprove` has no default. The host must choose. Options:
+Approvals are optional. Configure them per dashboard, with per-metric overrides:
+
+```js
+defineDashboard({
+  id: 'web', title: 'Web', metrics: ['web.visits', 'web.revenue'],
+  approvals: {
+    definitions: false,                  // most numbers here don't need sign-off...
+    metrics: { 'web.revenue': true },    // ...except this one
+    feedback: false,                     // builders close their own feedback work
+    source: 'host',                      // or 'nest' for Context Nest governance
+  },
+});
+// approvals: false turns both kinds off. Omitting it keeps both on.
+
+governedEvidence(e, state, { approvals: dashboard.definitionApprovals(e.id) });
+planStatusChange({ ...change, requireReview: dashboard.feedbackReview });
+```
+
+If you render verdicts yourself, handle `'ungoverned'` (definition approval off,
+data current). It only appears for metrics you've opted out.
+
+`ScopePolicy.canApprove` has no default. It must return false for metrics with
+definition approval off. The host must choose. Options:
 - any verified viewer (fast, weak separation of duties)
 - the metric's owner/steward (the rule the bundled widget demo follows)
 

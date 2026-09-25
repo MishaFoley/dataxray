@@ -15,3 +15,4 @@ export {
   COMMENT_STATUSES, planStatusChange, isReviewer, validateReviewerIds, isThreadCompleted,
 } from './workflow.mjs';
 export { PORT_METHODS, assertPort, defineDashboard } from './ports.mjs';
+export { APPROVAL_SOURCES, resolveApprovals, definitionApprovalRequired } from './approvals.mjs';

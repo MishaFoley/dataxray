@@ -9,13 +9,13 @@
 
 import { sha256Hex } from './sha256.mjs';
 import { fingerprintSql } from './fingerprint.mjs';
-import { computeVerdict } from './govern.mjs';
+import { computeVerdict, VERDICT } from './govern.mjs';
 
 /** Default max age for live evidence before it is treated as stale (5 minutes). */
 export const DEFAULT_EVIDENCE_MAX_AGE_MS = 5 * 60_000;
 
 /**
- * @typedef {'certified'|'uncertified'|'pending'|'drifted'|'stale'} TrustVerdict
+ * @typedef {'certified'|'uncertified'|'pending'|'drifted'|'stale'|'ungoverned'} TrustVerdict
  * @typedef {{label:string, status:'pass'|'warn'|'fail', detail:string}} EvidenceCheck
  * @typedef {object} MetricEvidence
  * @property {string} id                 permanent metric ID (never derived from a title)
@@ -107,13 +107,21 @@ export const EMPTY_GOVERNANCE = Object.freeze({ revision: 0, approval: null, rev
  * existing precedence (computeVerdict). Approval never changes the value.
  * Pass available=false when the governance store could not be read: the verdict
  * degrades to stale instead of showing an unconfirmed approval.
+ *
+ * Pass approvals=false when the host has turned definition approval off for this
+ * metric (see contracts/approvals.mjs). Health rules still apply: unavailable or
+ * old data is stale; otherwise the verdict is 'ungoverned', never 'certified'.
  * @param {Omit<MetricEvidence,'verdict'>|MetricEvidence} evidence
  * @param {GovernanceState} [state]
- * @param {{available?:boolean, now?:number, maxAgeMs?:number}} [opts]
+ * @param {{available?:boolean, approvals?:boolean, now?:number, maxAgeMs?:number}} [opts]
  * @returns {MetricEvidence}
  */
 export function governedEvidence(evidence, state = EMPTY_GOVERNANCE, opts = {}) {
-  const { available = true, now = Date.now(), maxAgeMs = DEFAULT_EVIDENCE_MAX_AGE_MS } = opts;
+  const { available = true, approvals = true, now = Date.now(), maxAgeMs = DEFAULT_EVIDENCE_MAX_AGE_MS } = opts;
+  if (approvals === false) {
+    const current = isEvidenceAvailable(evidence) && isEvidenceFresh(evidence, now, maxAgeMs);
+    return { ...evidence, approvedFingerprint: null, verdict: current ? VERDICT.UNGOVERNED : VERDICT.STALE };
+  }
   const approvedFingerprint = available ? state?.approval?.fingerprint ?? null : null;
   const verdict = computeVerdict({
     fpCurrent: evidence.fingerprint,
@@ -134,7 +142,7 @@ export function governedEvidence(evidence, state = EMPTY_GOVERNANCE, opts = {}) 
 /**
  * One presentation status per number, shared by tiles, icons and receipts.
  * Precedence: failed data checks > intentional unavailability > missing data >
- * governance loading/unavailable > verdict > warning checks > certified.
+ * governance loading/unavailable > verdict > warning checks > ungoverned > certified.
  * Health failures always outrank approval: an approved definition over broken
  * data is still red.
  * @param {MetricEvidence} evidence
@@ -156,6 +164,8 @@ export function evidenceStatus(evidence) {
     case 'pending': return { label: 'In review', tone: 'yellow' };
   }
   if (checks.some((c) => c.status === 'warn')) return { label: 'Checks need review', tone: 'yellow' };
+  // Neutral, not green: current data, but nobody has approved the definition.
+  if (evidence.verdict === 'ungoverned') return { label: 'Current · approval not required', tone: 'neutral' };
   if (evidence.verdict === 'certified') return { label: 'Certified and current', tone: 'green' };
   return { label: 'Unknown', tone: 'red' };
 }

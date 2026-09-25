@@ -1,7 +1,7 @@
 // Type declarations for dataxray/core. Runtime is plain ESM (core/index.mjs).
 
-export type TrustVerdict = "certified" | "uncertified" | "pending" | "drifted" | "stale";
-export const VERDICT: Readonly<{ STALE: "stale"; PENDING: "pending"; CERTIFIED: "certified"; DRIFTED: "drifted"; UNCERTIFIED: "uncertified" }>;
+export type TrustVerdict = "certified" | "uncertified" | "pending" | "drifted" | "stale" | "ungoverned";
+export const VERDICT: Readonly<{ STALE: "stale"; PENDING: "pending"; CERTIFIED: "certified"; DRIFTED: "drifted"; UNCERTIFIED: "uncertified"; UNGOVERNED: "ungoverned" }>;
 
 export function sha256Hex(input: string | Uint8Array): string;
 export function normalizeSql(raw: string): string;
@@ -20,7 +20,7 @@ export function computeVerdict(p?: {
   ingestFresh?: boolean;
   providerReachable?: boolean;
   reviewOpen?: boolean;
-}): TrustVerdict;
+}): Exclude<TrustVerdict, "ungoverned">;
 export function verdictLabel(verdict: string, opts?: { reviewOpen?: boolean }): string;
 export function computeHealth(stats?: object, config?: object, meta?: object): unknown;
 export function deriveStatus(p: object): string;
@@ -74,6 +74,6 @@ export function isVerifiableEvidence(
 export function governedEvidence<E extends Omit<MetricEvidence, "verdict">>(
   evidence: E,
   state?: GovernanceState,
-  opts?: { available?: boolean; now?: number; maxAgeMs?: number },
+  opts?: { available?: boolean; approvals?: boolean; now?: number; maxAgeMs?: number },
 ): E & { verdict: TrustVerdict; approvedFingerprint: string | null };
 export function evidenceStatus(evidence: MetricEvidence): EvidenceStatus;
